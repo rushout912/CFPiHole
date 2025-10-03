@@ -96,6 +96,9 @@ class App:
         self.logger.info("Done")
 
     def is_valid_hostname(self, hostname):
+        # First check if it's an adblock filter rule
+        if '##' in hostname or '#@' in hostname or '#?#' in hostname:
+            return False   
         import re
         if len(hostname) > 255:
             return False
