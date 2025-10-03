@@ -158,14 +158,25 @@ class App:
                         continue
 
                 else:
-                    domain = line.split('#')[0].split('!')[0].split('$')[0].strip()
-                    if not domain:
+                    # Skip cosmetic filtering rules and element hiding rules
+                    if any(x in line for x in ['##', '#@#', '#?#', '#$#', '$$', '$@$']):
+                        continue
+                
+                    # Skip rules with extended syntax
+                    if any(x in line for x in ['*', '^', '||', '|', '[', ']', '~']):
+                        continue
+                    # Only process lines that are pure domains or start with ||
+                    if '||' in line:
+                        domain = line.split('||')[1].split('^')[0].split('/')[0]
+                    else:
+                        domain = line.split('/')[0].split('^')[0]
+                    domain = domain.strip()
+                    if not domain or domain in self.whitelist:
                         continue
                 # Basic domain validation
                 if (domain and
                     self.is_valid_hostname(domain) and
-                    '.' in domain and
-                    domain not in self.whitelist):
+                    '.' in domain):
                     domains.append(domain)
                 else:
                     self.logger.debug(f"Skipped invalid domain: {domain}")
