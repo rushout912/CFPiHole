@@ -6,6 +6,7 @@ import cloudflare
 import configparser
 import pandas as pd
 import os
+import numpy as np
 
 class App:
     def __init__(self):        
@@ -35,7 +36,7 @@ class App:
             domains = self.convert_to_domain_list(list)
             all_domains = all_domains + domains
 
-        unique_domains = pd.unique(all_domains)
+        unique_domains = pd.unique(np.array(all_domains))
 
         # check if the list is already in Cloudflare
         cf_lists = cloudflare.get_lists(self.name_prefix)
@@ -62,7 +63,7 @@ class App:
             cf_lists = []
 
             # chunk the domains into lists of 1000 and create them
-            for chunk in self.chunk_list(unique_domains, 1000):
+            for chunk in self.chunk_list(unique_domains.tolist(), 1000):
                 list_name = f"{self.name_prefix} {len(cf_lists) + 1}"
 
                 self.logger.info(f"Creating list {list_name}")
@@ -99,7 +100,7 @@ class App:
         if len(hostname) > 255:
             return False
         hostname = hostname.rstrip(".")
-        allowed = re.compile('^[a-z0-9]([a-z0-9\-\_]{0,61}[a-z0-9])?$',re.IGNORECASE)
+        allowed = re.compile(r'^[a-z0-9]([a-z0-9\-\_]{0,61}[a-z0-9])?$',re.IGNORECASE)
         labels = hostname.split(".")
         
         # the TLD must not be all-numeric
@@ -133,32 +134,46 @@ class App:
 
         domains = []
         for line in data.splitlines():
+            line = line.strip()
 
             
-            # skip comments and empty lines
-            if line.startswith("#") or line.startswith(";") or line == "\n" or line == "":
+            # Skip empty lines and common comment/header patterns
+            if (not line or 
+                line.startswith(("#", ";", "[", "!", "Title:", "//")) or
+                any(x in line.lower() for x in ["title:", "last modified", "checksum", "expires:", "!"])):
                 continue
 
-            if is_hosts_file:
-                # remove the ip address and the trailing newline
-                domain = line.split()[1].rstrip()
+            try:
+                if is_hosts_file:
+                    parts = line.split()
+                    if len(parts) < 2:
+                        continue
+                    # remove the ip address and the trailing newline
+                    domain = line.split()[1].rstrip()
+                    # skip the localhost entry and check whitelist
+                    if domain == "localhost" and domain in self.whitelist:
+                        continue
 
-                # skip the localhost entry
-                if domain == "localhost":
-                    continue
-
-            else:
-                domain = line.rstrip()
-
-            #Check whitelist
-            if domain in self.whitelist:
-                continue
+                else:
+                    domain = line.rstrip()
+                # Basic domain validation
+                if (domain and
+                    '.' in domain and
+                    not domain.startswith('.') and
+                    not domain.endswith('.') and
+                    not any(c in domain for c in [' ', '*', '@', ':', '|', '"', "'", '`'])):
             
 
-            domains.append(domain)
+                    domains.append(domain)
+                else:
+                    self.logger.debug(f"Skipped invalid domain: {domain}")
+            except Exception as e:
+                self.logger.error(f"Error processing line: {line}")
+                self.logger.error(str(e))
+                continue        
 
-        self.logger.info(f"Number of domains: {len(domains)}")
-
+        self.logger.info(f"Number of valid domains found: {len(domains)}")
+        self.logger.debug(f"Sample domains: {domains[:5]}")
         return domains
 
 
@@ -169,6 +184,10 @@ class App:
 
 
 if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
 
 
     app = App()
