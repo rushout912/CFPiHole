@@ -158,15 +158,14 @@ class App:
                         continue
 
                 else:
-                    domain = line.rstrip()
+                    domain = line.split('#')[0].split('!')[0].split('$')[0].strip()
+                    if not domain:
+                        continue
                 # Basic domain validation
                 if (domain and
+                    self.is_valid_hostname(domain) and
                     '.' in domain and
-                    not domain.startswith('.') and
-                    not domain.endswith('.') and
-                    not any(c in domain for c in [' ', '*', '@', ':', '|', '"', "'", '`'])):
-            
-
+                    domain not in self.whitelist):
                     domains.append(domain)
                 else:
                     self.logger.debug(f"Skipped invalid domain: {domain}")
